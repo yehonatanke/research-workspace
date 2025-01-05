@@ -1,2 +1,2 @@
 # research-workspace
-Tools and templates for organizing research and experiment workflows.
+Tools and templates for organizing research and experiment.
