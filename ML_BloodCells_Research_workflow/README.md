@@ -1,6 +1,5 @@
 [VERSION 2.3]<br>
 
-
 Machine learning techniques for blood cells analysis research. It includes various models implemented using PyTorch and PyTorch Lightning, and provides utilities for training, evaluating, and visualizing the performance of these models.
 
 <details>
@@ -41,7 +40,7 @@ Machine learning techniques for blood cells analysis research. It includes vario
 
 <details>
   <summary>Models</summary>
-  <ol>
+  <ul>
     <li>
       <a href="#modelv0">ModelV0</a>: Fedforward neural network.
     </li>
@@ -63,7 +62,7 @@ Machine learning techniques for blood cells analysis research. It includes vario
     <li>
       <a href="#modelcfw">ModelCFW</a>: A custom convolutional neural network with different transformations.
     </li>
-  </ol>
+  </ul>
 </details>
 
 ## Structure
