@@ -368,3 +368,442 @@ def plot_dimension_comparison(df, target_dims=(360, 363)):
     plt.tight_layout()
 
     plt.show()
+
+def calculate_brightness(img_gray):
+  """Calculates average pixel intensity (Brightness)."""
+  return np.mean(img_gray)
+
+def calculate_contrast(img_gray):
+  """Calculates standard deviation of pixel intensities (Contrast)."""
+  return np.std(img_gray)
+
+def calculate_sharpness(img_gray):
+  """Calculates variance of Sobel gradient magnitude (Sharpness)."""
+  grad_x = cv2.Sobel(img_gray, cv2.CV_64F, 1, 0, ksize=3)
+  grad_y = cv2.Sobel(img_gray, cv2.CV_64F, 0, 1, ksize=3)
+  gradient_magnitude = np.hypot(grad_x, grad_y)
+  return np.var(gradient_magnitude)
+
+def calculate_entropy(img_gray):
+    """Calculates Shannon entropy of the grayscale histogram."""
+    hist = cv2.calcHist([img_gray], [0], None, [256], [0, 256])
+    hist_prob = hist.ravel() / hist.sum()
+    # Filter out zero probabilities before calculation
+    return scipy_entropy(hist_prob[hist_prob > 0], base=2)
+
+# --- Main Comparison Function (with Plotly plotting) ---
+
+def compare_image_metrics_plotly(df: pd.DataFrame, target_dimension: tuple = (360, 363)):
+    """
+    Calculates, averages, and plots image metrics (Brightness, Contrast,
+    Sharpness, Entropy) using Plotly, comparing images of a target
+    dimension against others.
+
+    Args:
+        df (pd.DataFrame): DataFrame with 'imgPath', 'label', 'dimensions' columns.
+                           'dimensions' should contain tuples or string representations
+                           of tuples (e.g., '(width, height)').
+        target_dimension (tuple): The specific dimension (width, height) to compare against.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the average metrics for both groups.
+                      Returns None if an error occurs or no images are processed.
+    """
+    metrics_target = {'Brightness': [], 'Contrast': [], 'Sharpness': [], 'Entropy': []}
+    metrics_other = {'Brightness': [], 'Contrast': [], 'Sharpness': [], 'Entropy': []}
+    processed_count = 0
+    error_count = 0
+
+    print(f"Starting metric calculation for {len(df)} images...")
+    print(f"Target dimension: {target_dimension}")
+
+    # Ensure 'dimensions' column is usable
+    if not pd.api.types.is_list_like(df['dimensions'].iloc[0]):
+        try:
+            df['dimensions_tuple'] = df['dimensions'].apply(lambda x: ast.literal_eval(str(x)) if isinstance(x, str) else x)
+            print("Converted 'dimensions' column strings to tuples.")
+        except Exception as e:
+            print(f"Warning: Could not auto-convert 'dimensions' column: {e}. Trying row-wise parsing.")
+            df['dimensions_tuple'] = df['dimensions'] # Keep original for row-wise handling
+    else:
+         df['dimensions_tuple'] = df['dimensions']
+
+    # Iterate efficiently
+    for row in df.itertuples(index=False):
+        img_path = row.imgPath
+        try:
+            # --- 1. Dimension Check ---
+            current_dim = row.dimensions_tuple
+            if isinstance(current_dim, str):
+                 try:
+                     current_dim = ast.literal_eval(current_dim)
+                 except:
+                     print(f"Skipping row: Could not parse dimension '{current_dim}' for image {img_path}")
+                     error_count += 1
+                     continue
+
+            if not isinstance(current_dim, tuple) or len(current_dim) != 2:
+                print(f"Skipping row: Invalid dimension format '{current_dim}' for image {img_path}")
+                error_count += 1
+                continue
+
+            # --- 2. Image Loading ---
+            if not os.path.exists(img_path):
+              print(f"Skipping row: Image file not found at {img_path}")
+              error_count += 1
+              continue
+
+            img_gray = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if img_gray is None:
+                print(f"Skipping row: Failed to load image {img_path}")
+                error_count += 1
+                continue
+
+            # --- 3. Metric Calculation ---
+            brightness = calculate_brightness(img_gray)
+            contrast = calculate_contrast(img_gray)
+            sharpness = calculate_sharpness(img_gray)
+            entropy = calculate_entropy(img_gray)
+
+            # --- 4. Grouping ---
+            is_target_dim = (current_dim == target_dimension)
+
+            if is_target_dim:
+                metrics_target['Brightness'].append(brightness)
+                metrics_target['Contrast'].append(contrast)
+                metrics_target['Sharpness'].append(sharpness)
+                metrics_target['Entropy'].append(entropy)
+            else:
+                metrics_other['Brightness'].append(brightness)
+                metrics_other['Contrast'].append(contrast)
+                metrics_other['Sharpness'].append(sharpness)
+                metrics_other['Entropy'].append(entropy)
+
+            processed_count += 1
+            if processed_count % 100 == 0:
+                 print(f"Processed {processed_count}/{len(df)} images...")
+
+        except Exception as e:
+            print(f"Error processing image {img_path}: {e}")
+            error_count += 1
+
+    print(f"\nFinished processing. Processed: {processed_count}, Skipped/Errors: {error_count}")
+
+    if processed_count == 0:
+        print("No images were successfully processed.")
+        if 'dimensions_tuple' in df.columns:
+           df.drop(columns=['dimensions_tuple'], inplace=True)
+        return None
+
+    # --- 5. Calculate Averages ---
+    avg_metrics = {}
+    groups = {'Target Dimension': metrics_target, 'Other Dimensions': metrics_other}
+    metric_names = ['Brightness', 'Contrast', 'Sharpness', 'Entropy']
+
+    for group_name, metrics_data in groups.items():
+        avg_metrics[group_name] = {}
+        for metric in metric_names:
+            values = metrics_data[metric]
+            if values:
+                avg_metrics[group_name][metric] = np.mean(values)
+            else:
+                avg_metrics[group_name][metric] = np.nan
+        avg_metrics[group_name]['Count'] = len(metrics_data.get('Brightness', []))
+
+    # Create results DataFrame
+    results_df = pd.DataFrame(avg_metrics)
+
+    if results_df.isnull().all().all():
+       print("No valid metrics calculated for plotting.")
+       if 'dimensions_tuple' in df.columns:
+           df.drop(columns=['dimensions_tuple'], inplace=True)
+       return results_df
+
+    # --- 6. Plotting  ---
+    print("\nAverage Metrics:")
+    print(results_df)
+
+    # Prepare data for plotting (exclude 'Count' row)
+    plot_df = results_df.drop('Count')
+    metrics_to_plot = plot_df.index.tolist() # Should be ['Brightness', 'Contrast', 'Sharpness', 'Entropy']
+
+    fig = go.Figure()
+
+    # Add bar trace for Target Dimension
+    target_count = int(results_df.loc['Count', 'Target Dimension'])
+    fig.add_trace(go.Bar(
+        x=metrics_to_plot,
+        y=plot_df['Target Dimension'].fillna(0), # Use fillna(0) for plotting if NaN
+        name=f'Target ({target_dimension}) - Count: {target_count}',
+        text=plot_df['Target Dimension'].apply(lambda x: f'{x:.2f}' if pd.notna(x) else 'N/A'), # Text on bars
+        textposition='auto' # Position text automatically
+    ))
+
+    # Add bar trace for Other Dimensions
+    other_count = int(results_df.loc['Count', 'Other Dimensions'])
+    fig.add_trace(go.Bar(
+        x=metrics_to_plot,
+        y=plot_df['Other Dimensions'].fillna(0), # Use fillna(0) for plotting if NaN
+        name=f'Other Dimensions - Count: {other_count}',
+        text=plot_df['Other Dimensions'].apply(lambda x: f'{x:.2f}' if pd.notna(x) else 'N/A'), # Text on bars
+        textposition='auto' # Position text automatically
+    ))
+
+    # Update layout for grouped bars, titles, etc.
+    fig.update_layout(
+        barmode='group', # Group bars side-by-side
+        title_text='Average Image Metrics Comparison by Dimension Group (Plotly)',
+        xaxis_title='Metric',
+        yaxis_title='Average Value',
+        legend_title='Dimension Group',
+        #margin=dict(l=20, r=20, t=50, b=20) 
+    )
+
+    # Show the interactive plot
+    fig.show()
+
+    # Clean up added column
+    if 'dimensions_tuple' in df.columns:
+       df.drop(columns=['dimensions_tuple'], inplace=True)
+
+    return results_df
+
+# Metric Calculation Functions (Utilities)
+
+# Calculates average pixel intensity (Brightness)
+def calculate_brightness(img_gray):
+    return np.mean(img_gray)
+
+# Calculates standard deviation of pixel intensities (Contrast)
+def calculate_contrast(img_gray):
+    return np.std(img_gray)
+
+# Calculates variance of Sobel gradient magnitude (Sharpness)
+def calculate_sharpness(img_gray):
+    grad_x = cv2.Sobel(img_gray, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(img_gray, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_magnitude = np.hypot(grad_x, grad_y)
+    return np.var(gradient_magnitude)
+
+# Calculates Shannon entropy of the grayscale histogram
+def calculate_entropy(img_gray):
+    hist = cv2.calcHist([img_gray], [0], None, [256], [0, 256])
+    hist_prob = hist.ravel() / hist.sum()
+    return scipy_entropy(hist_prob[hist_prob > 0], base=2)
+
+# Main Comparison Function
+def compare_image_metrics(df: pd.DataFrame, target_dimension: tuple = (360, 363)):
+    """
+    Calculates, averages, and plots image metrics (Brightness, Contrast,
+    Sharpness, Entropy) creating 4 separate subplots, comparing images of a target
+    dimension against others.
+
+    Args:
+        df (pd.DataFrame): DataFrame with 'imgPath', 'label', 'dimensions' columns.
+                           'dimensions' should contain tuples or string representations
+                           of tuples (e.g., '(width, height)').
+        target_dimension (tuple): The specific dimension (width, height) to compare against.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the average metrics for both groups.
+                      Returns None if an error occurs or no images are processed.
+    """
+    metrics_target = {'Brightness': [], 'Contrast': [], 'Sharpness': [], 'Entropy': []}
+    metrics_other = {'Brightness': [], 'Contrast': [], 'Sharpness': [], 'Entropy': []}
+    processed_count = 0
+    error_count = 0
+
+    print(f"Starting metric calculation for {len(df)} samples...")
+    print(f"Target dimension: {target_dimension}")
+
+    # Ensure 'dimensions' column is usable
+    if not pd.api.types.is_list_like(df['dimensions'].iloc[0]):
+        try:
+            df['dimensions_tuple'] = df['dimensions'].apply(lambda x: ast.literal_eval(str(x)) if isinstance(x, str) else x)
+            print("Converted 'dimensions' column strings to tuples.")
+        except Exception as e:
+            print(f"Warning: Could not auto-convert 'dimensions' column: {e}. Trying row-wise parsing.")
+            df['dimensions_tuple'] = df['dimensions']
+    else:
+        df['dimensions_tuple'] = df['dimensions']
+
+    # for row in tqdm(df.itertuples(index=False), total=len(df), desc="Processing images"):
+    for row in df.itertuples(index=False):
+        img_path = row.imgPath
+        try:
+            # Dimension Check
+            current_dim = row.dimensions_tuple
+            if isinstance(current_dim, str):
+                try:
+                    current_dim = ast.literal_eval(current_dim)
+                except:
+                    print(f"Skipping row: Could not parse dimension '{current_dim}' for image {img_path}")
+                    error_count += 1
+                    continue
+
+            if not isinstance(current_dim, tuple) or len(current_dim) != 2:
+                print(f"Skipping row: Invalid dimension format '{current_dim}' for image {img_path}")
+                error_count += 1
+                continue
+
+            # Load Image
+            if not os.path.exists(img_path):
+                print(f"Skipping row: Image file not found at {img_path}")
+                error_count += 1
+                continue
+
+            img_gray = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if img_gray is None:
+                print(f"Skipping row: Failed to load image {img_path}")
+                error_count += 1
+                continue
+
+            # Metric Calculation 
+            brightness = calculate_brightness(img_gray)
+            contrast = calculate_contrast(img_gray)
+            sharpness = calculate_sharpness(img_gray)
+            entropy = calculate_entropy(img_gray)
+
+            # Grouping 
+            is_target_dim = (current_dim == target_dimension)
+
+            if is_target_dim:
+                metrics_target['Brightness'].append(brightness)
+                metrics_target['Contrast'].append(contrast)
+                metrics_target['Sharpness'].append(sharpness)
+                metrics_target['Entropy'].append(entropy)
+            else:
+                metrics_other['Brightness'].append(brightness)
+                metrics_other['Contrast'].append(contrast)
+                metrics_other['Sharpness'].append(sharpness)
+                metrics_other['Entropy'].append(entropy)
+
+            processed_count += 1
+            # if processed_count % 100 == 0:
+            #     print(f"Processed {processed_count}/{len(df)} images...")
+
+        except Exception as e:
+            print(f"Error processing image {img_path}: {e}")
+            error_count += 1
+
+    print(f"\nFinished processing. Processed: {processed_count}, Skipped/Errors: {error_count}")
+
+    if processed_count == 0:
+        print("No images were successfully processed.")
+        if 'dimensions_tuple' in df.columns:
+            df.drop(columns=['dimensions_tuple'], inplace=True)
+        return None
+
+    # Calculate Averages
+    avg_metrics = {}
+    groups = {'Target Dimension': metrics_target, 'Other Dimensions': metrics_other}
+    metric_names = ['Brightness', 'Contrast', 'Sharpness', 'Entropy']
+
+    for group_name, metrics_data in groups.items():
+        avg_metrics[group_name] = {}
+        for metric in metric_names:
+            values = metrics_data[metric]
+            if values: 
+                avg_metrics[group_name][metric] = np.round(np.mean(values), 3)
+            else:
+                avg_metrics[group_name][metric] = np.nan
+        avg_metrics[group_name]['Count'] = len(metrics_data.get('Brightness', []))
+
+    # Create results DataFrame
+    results_df = pd.DataFrame(avg_metrics)
+
+    if results_df.isnull().all().all():
+        print("No valid metrics calculated for plotting.")
+        if 'dimensions_tuple' in df.columns:
+            df.drop(columns=['dimensions_tuple'], inplace=True)
+        return results_df
+
+    # Plotting 
+    print("\nAverage Metrics:")
+    print(results_df)
+
+    # Prepare data for plotting (exclude 'Count' row)
+    plot_df = results_df.drop('Count')
+    metrics_to_plot = plot_df.index.tolist()  # ['Brightness', 'Contrast', 'Sharpness', 'Entropy']
+
+    # Create a 2x2 subplot grid
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=metrics_to_plot,  
+        vertical_spacing=0.2,
+        horizontal_spacing=0.2,
+        # row_heights=[0.5, 0.5],  
+        # column_widths=[0.5, 0.5] 
+    )
+
+    group_names = ['Target', 'Other']
+    target_count = int(results_df.loc['Count', 'Target Dimension'])
+    other_count = int(results_df.loc['Count', 'Other Dimensions'])
+
+    for idx, metric in enumerate(metrics_to_plot, 1):
+        row = (idx - 1) // 2 + 1  
+        col = (idx - 1) % 2 + 1   
+
+        # Values for the current metric
+        target_value = plot_df.loc[metric, 'Target Dimension']
+        other_value = plot_df.loc[metric, 'Other Dimensions']
+
+        # Bar for Target Dimension
+        fig.add_trace(
+            go.Bar(
+                x=[group_names[0]],
+                y=[target_value if pd.notna(target_value) else 0],
+                name=f'Target ({target_dimension}) - Count: {target_count}' if idx == 1 else '',
+                text=[f'{target_value:.2f}' if pd.notna(target_value) else 'N/A'],
+                textposition='auto',
+                marker_color='#636EFA',
+                showlegend=(idx == 1)  # Show legend only for the first subplot
+            ),
+            row=row,
+            col=col
+        )
+
+        # Bar for Other Dimensions
+        fig.add_trace(
+            go.Bar(
+                x=[group_names[1]],
+                y=[other_value if pd.notna(other_value) else 0],
+                name=f'Other Dimensions - Count: {other_count}' if idx == 1 else '',
+                text=[f'{other_value:.2f}' if pd.notna(other_value) else 'N/A'],
+                textposition='auto',
+                marker_color='#EF553B',
+                showlegend=(idx == 1)  # Show legend only for the first subplot
+            ),
+            row=row,
+            col=col
+        )
+
+    fig.update_layout(
+        title_text='Average Image Metrics Comparison by Dimension Group (Plotly)',
+        barmode='group',
+        showlegend=True,
+        height=800,  
+        width=1200,  
+        legend_title='Dimension Group'
+    )
+
+    for i in range(1, 5):
+        row = (i - 1) // 2 + 1
+        col = (i - 1) % 2 + 1
+        fig.update_yaxes(title_text='Average Value', row=row, col=col)
+
+    fig.update_layout(
+        title_text="Image Quality Comparison Across Dimension Groups ((360,363) vs. Other)",
+        height=600,
+        width=1000
+    )
+
+    print()
+    fig.show()
+
+    # Clean up added column
+    if 'dimensions_tuple' in df.columns:
+        df.drop(columns=['dimensions_tuple'], inplace=True)
+
+    return results_df
