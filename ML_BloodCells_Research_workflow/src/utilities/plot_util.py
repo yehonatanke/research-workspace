@@ -231,3 +231,140 @@ def plot_metrics(model: torch.nn.Module):
     plot_loss(history)
     plot_accuracy(history)
     plot_precision(history)
+
+
+def visualize_image_pairs(df, x, y, z):
+    """
+    Visualizes z pairs of images from a DataFrame: one with specified dimensions (x,y) and
+    one random image with dimensions (360,363) from the same label.
+
+    Parameters:
+    - df: Pandas DataFrame with columns 'imgPath', 'label', 'dimensions'
+    - x, y: integers representing the target dimensions (x,y) to search for
+    - z: integer, number of image pairs to visualize
+    """
+    # Filter images with dimensions (x,y)
+    target_dims = (x, y)
+    non_standard_df = df[df['dimensions'] == target_dims]
+
+    if non_standard_df.empty:
+        print(f"No images found with dimensions {target_dims}")
+        return
+
+    # Ensure we don't try to visualize more pairs than available
+    z = min(z, len(non_standard_df))
+
+    # Randomly select z images from non-standard dimensions
+    selected_non_standard = non_standard_df.sample(n=z, random_state=None)
+
+    # Set up the plot with smaller figure size
+    fig, axes = plt.subplots(z, 2, figsize=(6, 3*z))
+    if z == 1:
+        axes = [axes]  # Make it iterable 
+
+    for idx, (row_idx, row) in enumerate(selected_non_standard.iterrows()):
+        # Load the non-standard image
+        non_std_path = row['imgPath']
+        non_std_label = row['label']
+        non_std_img = cv2.imread(str(non_std_path))
+        if non_std_img is None:
+            print(f"Failed to load image: {non_std_path}")
+            continue
+        non_std_img = cv2.cvtColor(non_std_img, cv2.COLOR_BGR2RGB)
+
+        # Find a random standard image (360,363) with the same label
+        standard_df = df[(df['dimensions'] == (360, 363)) & (df['label'] == non_std_label)]
+        if standard_df.empty:
+            print(f"No standard (360,363) image found for label {non_std_label}")
+            continue
+        standard_row = standard_df.sample(n=1, random_state=None).iloc[0]
+        std_path = standard_row['imgPath']
+        std_img = cv2.imread(str(std_path))
+        if std_img is None:
+            print(f"Failed to load image: {std_path}")
+            continue
+        std_img = cv2.cvtColor(std_img, cv2.COLOR_BGR2RGB)
+
+        # Plot non-standard image
+        axes[idx][0].imshow(non_std_img)
+        axes[idx][0].text(
+            10, 10,  # Position
+            f'Dims: {target_dims}\nLabel: {non_std_label}',
+            ha='left', va='top',
+            fontsize=6,
+            color='blue',
+            bbox=dict(facecolor='white', boxstyle='round', alpha=0.5, edgecolor='none')
+        )
+        axes[idx][0].axis('off')
+
+        # Plot standard image
+        axes[idx][1].imshow(std_img)
+        axes[idx][1].text(
+            10, 10,  # Position
+            f'Dims: (360,363)\nLabel: {non_std_label}',
+            ha='left', va='top',
+            fontsize=6,
+            color='blue',
+            bbox=dict(facecolor='white',boxstyle='round', alpha=0.5, edgecolor='none')
+        )
+        axes[idx][1].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_image_entropy(img_path):
+    """Calculate entropy of a grayscale image."""
+    try:
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return np.nan
+        hist = np.histogram(img, bins=256, range=[0, 256], density=True)[0]
+        hist = hist[hist > 0]
+        return entropy(hist, base=2)
+    except:
+        return np.nan
+
+def plot_dimension_comparison(df, target_dims=(360, 363)):
+    """
+    Compare images with target dimensions vs. others in a DataFrame.
+
+    Parameters:
+    - df: Pandas DataFrame with columns 'imgPath', 'label', 'dimensions'
+    - target_dims: Tuple of (width, height) to compare against (default: (360, 363))
+
+    Outputs:
+    - Saves two plots: entropy histogram and label distribution bar plot
+    """
+    # Ensure dimensions are tuples for comparison
+    df['dimensions'] = df['dimensions'].apply(lambda x: eval(x) if isinstance(x, str) else x)
+
+    # Create a column to identify target dimensions
+    df['is_target_dims'] = df['dimensions'].apply(lambda x: 'Target (360, 363)' if x == target_dims else 'Other')
+
+    # Compute entropy for each image
+    df['entropy'] = df['imgPath'].apply(compute_image_entropy)
+
+    # Drop rows with NaN entropy (failed to load images)
+    df = df.dropna(subset=['entropy'])
+
+    # Plot 1: Entropy distribution comparison
+    plt.figure(figsize=(10, 6))
+    sns.histplot(data=df, x='entropy', hue='is_target_dims', element='step', stat='density', common_norm=False)
+    plt.title('Entropy Distribution: Images with (360, 363) vs. Other Dimensions')
+    plt.xlabel('Entropy (bits)')
+    plt.ylabel('Density')
+    plt.grid(True)
+    plt.show()
+
+    # Plot 2: Label distribution comparison
+    plt.figure(figsize=(12, 6))
+    label_counts = df.groupby(['is_target_dims', 'label']).size().unstack(fill_value=0)
+    label_counts.plot(kind='bar', stacked=False, width=0.4)
+    plt.title('Label Distribution: Images with (360, 363) vs. Other Dimensions')
+    plt.xlabel('Dimension Group')
+    plt.ylabel('Count')
+    plt.legend(title='Label', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+
+    plt.show()
