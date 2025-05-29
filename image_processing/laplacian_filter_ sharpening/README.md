@@ -2,7 +2,7 @@
 
 ## Overview
 
-This program implements a Laplacian filter for image sharpening using frequency domain processing. It applies a Laplacian filter to grayscale images in the frequency domain, resulting in sharpened images with enhanced edges and details. The program processes multiple images and provides visualization of intermediate steps.
+Implements Laplacian filter for image sharpening using frequency domain processing. It applies a Laplacian filter to grayscale images in the frequency domain, resulting in sharpened images with enhanced edges and details. Processes multiple images and provides visualization of intermediate steps.
 
 ## Laplacian Filter in Frequency Domain
 
@@ -146,16 +146,6 @@ As the Laplacian filter is applied, you'll see the emphasis on edges and fine de
 - Side-by-side display of original and enhanced images
 - Automatic saving of all intermediate and final outputs
 - Batch processing of multiple images
-
-## Usage
-
-1. Ensure your input images are in the `input` directory.
-2. Run `src/main.py`:
-   ```
-   python src/main.py
-   ```
-3. The program will process all supported image files (`.tif` in this case) in the `input` directory.
-4. Processed images will be displayed and saved in the `output` directory.
 
 ## Examples
 

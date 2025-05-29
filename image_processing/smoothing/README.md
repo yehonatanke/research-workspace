@@ -1,10 +1,6 @@
 # Image Smoothing 
 
-This project demonstrates various image processing techniques, including the creation of geometric shapes and the application of a smoothing algorithm.
-
-## Overview
-
-This project showcases the creation of basic geometric shapes (circle, square, and triangle) as binary images and applies a smoothing algorithm to these shapes. The process is visualized using both 2D and 3D representations.
+Creates geometric shapes and apply a smoothing algorithm.
 
 ## Shapes
 
