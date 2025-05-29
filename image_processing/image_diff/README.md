@@ -1,27 +1,10 @@
 # Image Differences
 
-This Python script demonstrates the process of filling color channels in a digital image. It provides a visual representation of how different color combinations are created using the RGB (Red, Green, Blue) color model.
-
-## Function Description
-
-The main function `fill_color_channel` has the following signature:
-
-```python
-def fill_color_channel(n: int, color: str = 'red') -> np.ndarray:
-```
-
-Parameters:
-- `n` (int): Number of steps in the color fill process
-- `color` (str): Color(s) to fill. Can be 'red', 'green', 'blue', or any combination
-
-Returns:
-- `np.ndarray`: The final image array
-
-The function creates a series of images showing the gradual filling of the specified color channels.
+Demonstrates the process of filling color channels in a digital image. It provides a visual representation of how different color combinations are created using the RGB color model.
 
 ## Examples
 
-Here are some examples of how to use the function:
+Examples of how to use the function:
 
 ```python
 # Red gradient
@@ -174,6 +157,5 @@ In digital images, we use the RGB (Red, Green, Blue) color model. The idea behin
     - It corresponds to how many displays and screens work, which use red, green, and blue sub-pixels to create colors.
 
 6. Value Range:
-   In our code, we use values between 0 and 1 for each color channel. 0 represents the absence of color, and 1 represents the maximum intensity of the color.
+   We use values between 0 and 1 for each color channel. 0 represents the absence of color, and 1 represents the maximum intensity of the color.
 
-This representation allows for efficient and intuitive handling of colors in digital images, making it easier to manipulate and understand the color composition of each pixel.
