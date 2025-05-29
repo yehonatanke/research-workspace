@@ -1,0 +1,17 @@
+F=imread('lena.gif');
+subplot(2,2,1); imshow(F); title('original');
+FF=fft2(double(F));
+[M,N]=size(FF);
+FF=fft2(double(F),M,N);
+subplot(2,2,2); imagesc(20*log10(abs(FF))); title('Frequency domain');
+mask=zeros(size(FF));
+p=60;
+T=ones(p,p);
+mask(1:p,1:p)=T;
+mask(end-p+1:end,1:p)=T;
+mask(end-p+1:end,end-p+1:end)=T;
+mask(1:p,end-p+1:end)=T;
+subplot(2,2,3); imagesc(mask); title('Mask');
+MFF=mask.*FF;
+A=ifft2(MFF);
+subplot(2,2,4); imshow(uint8(real(A)));title('compressed image');
